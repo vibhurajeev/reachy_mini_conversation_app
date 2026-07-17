@@ -1,0 +1,10 @@
+# Extra dependencies for the Hermes gateway backend (CONVERSATION_BACKEND=hermes).
+# Kept out of pyproject.toml to leave the upstream dependency set untouched.
+# Install into the app venv:  uv pip install -r requirements-hermes.txt
+silero-vad>=5.1          # client-side turn detection (needs torch or onnxruntime)
+onnxruntime>=1.20        # Silero ONNX runtime (lighter than full torch)
+faster-whisper>=1.1      # local STT (CTranslate2 Whisper)
+kokoro-onnx>=0.4         # default TTS engine (Kokoro-82M); model files downloaded separately
+httpx>=0.27              # already an app dependency; listed for standalone installs
+# Piper TTS fallback is used via its CLI (`piper`), not a Python package:
+# install from https://github.com/OHF-Voice/piper1-gpl if TTS_ENGINE=piper.

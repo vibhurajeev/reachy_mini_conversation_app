@@ -2,11 +2,7 @@ dance
 stop_dance
 play_emotion
 stop_emotion
-camera
 idle_do_nothing
 move_head
 go_to_sleep
-remember
-forget
 head_tracking
-ask_hermes

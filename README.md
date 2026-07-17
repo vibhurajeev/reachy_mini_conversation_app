@@ -149,6 +149,41 @@ HF_REALTIME_WS_URL=ws://127.0.0.1:8765/v1/realtime
 
 In the web UI's Settings view, the Connection section lets you choose either the built-in server or a local `host:port` target. The UI writes `HF_REALTIME_CONNECTION_MODE` for you, and the local path writes `HF_REALTIME_WS_URL` with a default of `localhost:8765`.
 
+### Hermes gateway mode (this fork)
+
+This fork adds a second backend where **all intelligence routes through a
+[Hermes Agent](https://github.com/NousResearch/hermes-agent)**: the app does
+client-side VAD → local Whisper STT → HTTP/SSE to Hermes's `api_server` →
+sentence-streamed local TTS, plus robot-action directives (`⟦emotion:happy⟧`)
+parsed from the reply. The app runs on a server next to Hermes — the robot
+(Reachy Mini Wireless) runs only the stock daemon, and the SDK connects over
+the network automatically.
+
+Setup, in order:
+
+1. **Hermes VM** — enable the `api_server` platform, restrict the robot
+   channel's toolset, and add the robot rules to `SOUL.md`:
+   follow [docs/HERMES_VM_SETUP.md](docs/HERMES_VM_SETUP.md).
+2. **Server app install** (same VM or any box that reaches both Hermes and the
+   robot's LAN):
+   ```bash
+   git clone https://github.com/vibhurajeev/reachy_mini_conversation_app.git
+   cd reachy_mini_conversation_app
+   uv sync && uv pip install -r requirements-hermes.txt
+   # Kokoro TTS model files (once):
+   curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
+   curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+   ```
+3. **Configure `.env`** (see the `Hermes gateway backend` block in
+   `.env.example`): at minimum `CONVERSATION_BACKEND=hermes`,
+   `HERMES_API_URL`, `HERMES_API_KEY`.
+4. **Robot** — power on, on the same LAN; the daemon and `reachy-mini.local`
+   discovery are stock behavior. Then run `reachy-mini-conversation-app` on
+   the server. First run downloads the Whisper model (~500 MB for `small`).
+
+The upstream Hugging Face backend remains the default
+(`CONVERSATION_BACKEND=hf` or unset) and is unaffected.
+
 ## Running the app
 
 Activate your virtual environment, then launch:

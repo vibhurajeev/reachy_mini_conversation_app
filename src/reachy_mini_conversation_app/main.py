@@ -1,6 +1,7 @@
 """Entrypoint for the Reachy Mini conversation app."""
 
 from __future__ import annotations
+import os
 import sys
 import time
 import asyncio
@@ -165,7 +166,17 @@ def run(
     )
 
     def build_handler(startup_voice: Optional[str] = None) -> ConversationHandler:
-        """Build a Hugging Face realtime handler for the current runtime config."""
+        """Build the conversation backend selected by CONVERSATION_BACKEND."""
+        if os.getenv("CONVERSATION_BACKEND", "hf").strip().lower() == "hermes":
+            from reachy_mini_conversation_app.hermes_backend import HermesTextHandler
+
+            logger.info("Using Hermes gateway handler (all intelligence via Hermes)")
+            return HermesTextHandler(
+                deps,
+                instance_path=instance_path,
+                startup_voice=startup_voice,
+            )
+
         from reachy_mini_conversation_app.huggingface_realtime import HuggingFaceRealtimeHandler
 
         hf_connection_selection = get_hf_connection_selection()
