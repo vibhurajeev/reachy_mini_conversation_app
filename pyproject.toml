@@ -39,6 +39,7 @@ dev = [
 
 [project.scripts]
 reachy-mini-conversation-app = "reachy_mini_conversation_app.main:main"
+avail-intern-bridge = "reachy_mini_conversation_app.hermes_backend.bridge_server:main"
 
 [tool.uv]
 exclude-newer = "7 days"
@@ -62,6 +63,7 @@ where = ["src"]
 reachy_mini_conversation_app = [
   "static/**/*",
   ".env.example",
+  "hermes_backend/data/*",
 ]
 reachy_talk_data = [
   "profiles/**/*.txt",

@@ -73,3 +73,7 @@ class HermesSettings:
 
     # Output rate expected by the robot media player (play_loop never resamples).
     player_sample_rate: int = field(default_factory=lambda: _env_int("PLAYER_SAMPLE_RATE", 16000))
+
+    # Bridge split (D13v2): the thin on-robot handler talks to this service.
+    bridge_url: str = field(default_factory=lambda: os.getenv("BRIDGE_URL", "http://127.0.0.1:8643"))
+    bridge_api_key: str = field(default_factory=lambda: os.getenv("BRIDGE_API_KEY", ""))

@@ -167,7 +167,17 @@ def run(
 
     def build_handler(startup_voice: Optional[str] = None) -> ConversationHandler:
         """Build the conversation backend selected by CONVERSATION_BACKEND."""
-        if os.getenv("CONVERSATION_BACKEND", "hf").strip().lower() == "hermes":
+        backend = os.getenv("CONVERSATION_BACKEND", "hf").strip().lower()
+        if backend == "bridge":
+            from reachy_mini_conversation_app.hermes_backend.bridge_handler import BridgeHandler
+
+            logger.info("Using bridge handler (thin robot side; brains on the bridge service)")
+            return BridgeHandler(
+                deps,
+                instance_path=instance_path,
+                startup_voice=startup_voice,
+            )
+        if backend == "hermes":
             from reachy_mini_conversation_app.hermes_backend import HermesTextHandler
 
             logger.info("Using Hermes gateway handler (all intelligence via Hermes)")

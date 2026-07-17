@@ -82,3 +82,21 @@ curl -s http://127.0.0.1:8642/v1/chat/completions \
 
 Expect an in-character reply. Then repeat with an unaddressed sentence
 ("so anyway the quarterly numbers look fine") and expect `⟦ignore⟧`.
+
+## 5. Bridge service (split deployment)
+
+With the thin app on the robot (`CONVERSATION_BACKEND=bridge`), run the bridge
+next to Hermes:
+
+```bash
+cd ~/reachy/reachy_mini_conversation_app
+echo "BRIDGE_API_KEY=$(openssl rand -hex 32)" >> .env    # share this with the robot
+uv run avail-intern-bridge                                # port 8643, all interfaces
+curl -s http://127.0.0.1:8643/health                      # {"status":"ok","hermes":true}
+```
+
+The bridge is the ONLY thing exposed to the robot's network. It runs
+STT/LLM/TTS on behalf of the robot and refuses to start without a strong
+`BRIDGE_API_KEY`. Keep `API_SERVER_HOST=127.0.0.1` for Hermes itself — the
+robot never talks to Hermes directly. For production, run the bridge under
+tmux first, then a systemd unit once stable.

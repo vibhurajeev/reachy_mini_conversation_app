@@ -5,7 +5,7 @@ as its voice/body layer, bridged to a Hermes Agent "brain" on a sandboxed VM wit
 company Slack access.
 
 ```
-you ──voice──► Reachy Mini (Pi 5, this app) ──ssh (ask_hermes)──► Hermes VM ──► Slack
+you ──voice──► Reachy Mini (Pi 5: thin app, VAD+motion) ──http──► VM: bridge (STT→TTS) ──► Hermes ──► Slack
                realtime voice model                               Kimi K3 via OpenRouter
                motion / camera / emotions                         memory, tools, MCP
 ```
@@ -69,58 +69,71 @@ Gotchas we hit:
 
 Socket Mode is outbound-only: the VM needs no public inbound port.
 
-## Part C — Robot (Reachy Mini Wireless, Pi 5)
+## Part C — Bridge service (on the VM, next to Hermes)
 
-1. Power the robot, join it to Wi-Fi, open its dashboard (`http://reachy-mini.local`),
-   and SSH into the Pi.
-2. Install this fork on the Pi:
-   ```bash
-   git clone https://github.com/vibhurajeev/reachy_mini_conversation_app.git
-   cd reachy_mini_conversation_app
-   uv sync
-   ```
-3. Configure `.env` in the checkout:
-   ```
-   REACHY_MINI_CUSTOM_PROFILE=avail_intern
-   HERMES_SSH_HOST=<user>@<vm-host>
-   # optional: HERMES_TIMEOUT_S=180
-   ```
-   The `avail_intern` profile ships in this repo's `profiles/` dir, so no external
-   profiles directory is needed. The voice backend is Hugging Face's realtime
-   endpoint (the app's only backend; free `deployed` mode is the default —
-   `HF_REALTIME_CONNECTION_MODE=local` + `HF_REALTIME_WS_URL` can point at a
-   self-hosted speech-to-speech server later). See ARCHITECTURE.md.
-
-## Part D — The bridge (robot → brain)
-
-On the Pi:
+The bridge does STT (Whisper) → Hermes (localhost) → TTS (Kokoro) on the
+robot's behalf, streaming back ready-to-play audio events. It is the only
+component the robot talks to.
 
 ```bash
-ssh-keygen -t ed25519 -N ""
-# append ~/.ssh/id_ed25519.pub to ~/.ssh/authorized_keys on the VM, then:
-echo "say hi" | ssh -o BatchMode=yes <user>@<vm-host> bash -lc hermes
+cd ~/reachy/reachy_mini_conversation_app
+uv sync && uv pip install -r requirements-hermes.txt
+mkdir -p models && cd models   # Kokoro voice models, once (~340 MB)
+curl -sLO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
+curl -sLO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+cd ..
+cat >> .env <<'ENV'
+HERMES_API_URL=http://127.0.0.1:8642
+HERMES_API_KEY=<the API_SERVER_KEY from Part A>
+HERMES_SESSION_KEY=agent:main:robot:office
+KOKORO_MODEL_PATH=models/kokoro-v1.0.onnx
+KOKORO_VOICES_PATH=models/voices-v1.0.bin
+ENV
+echo "BRIDGE_API_KEY=$(openssl rand -hex 32)" >> .env   # copy this for Part D
+uv run avail-intern-bridge                    # :8643; first run downloads Whisper (~500 MB)
+curl -s http://127.0.0.1:8643/health          # expect {"status":"ok","hermes":true}
 ```
 
-That command is exactly what the `ask_hermes` tool runs. If it answers, the bridge
-works. If the VM is not publicly reachable from the office network, put the Pi and the
-VM on a shared Tailscale tailnet instead of opening ports.
+## Part D — Robot (Reachy Mini Wireless, thin app)
+
+The robot runs only mic capture + VAD + motion; no models, no torch.
+
+1. Power the robot, join it to the office Wi-Fi (its dashboard handles this).
+2. From a machine with this repo, install the fork into the robot's app venv:
+   ```bash
+   scp -r . pollen@reachy-mini.local:/tmp/avail_intern
+   ssh pollen@reachy-mini.local "/venvs/apps_venv/bin/pip install /tmp/avail_intern onnxruntime"
+   ```
+3. Give the app its env (inherited from the daemon) on the Pi:
+   `sudo systemctl edit reachy-mini-daemon` and add:
+   ```
+   [Service]
+   Environment=CONVERSATION_BACKEND=bridge
+   Environment=BRIDGE_URL=http://<vm-ip>:8643
+   Environment=BRIDGE_API_KEY=<the key from Part C>
+   Environment=REACHY_MINI_CUSTOM_PROFILE=avail_intern
+   ```
+   then `sudo systemctl restart reachy-mini-daemon`.
+4. Start the app from the dashboard — or make it the default wake-up
+   experience with the daemon's `--startup-app reachy_mini_conversation_app`
+   (touching an antenna then wakes the robot straight into the intern).
 
 ## Part E — First conversation
 
-Start the robot daemon, then launch the app (`reachy-mini-conversation-app`, or via
-the dashboard). Smoke tests, in order of what they exercise:
+Smoke tests, in order of what they exercise:
 
-1. "Hey, how's it going?" — voice loop + personality.
-2. "What am I holding?" — camera tool (vision).
-3. "Ask HQ to summarize what Avail Nexus is." — full SSH → Hermes → Kimi round trip.
-4. DM the bot in Slack — same brain, same memory, different surface.
+1. "Hey intern, how's it going?" — VAD → bridge → Hermes → voice round trip.
+2. Talk to a colleague near the robot — expect silence (the `⟦ignore⟧` gate).
+3. "Intern, do a little dance." — the directive channel.
+4. DM the bot in Slack (once Part B is done) — same brain, different surface.
 
 ## Troubleshooting
 
 | Symptom | Cause / fix |
 |---|---|
-| Robot talks but `ask_hermes` errors "HERMES_SSH_HOST is not configured" | `.env` not loaded or var missing on the Pi |
-| `ask_hermes` times out | VM unreachable from Pi's network (use Tailscale), or first-token latency > `HERMES_TIMEOUT_S` |
-| Hermes answers in Slack but not via robot | SSH key not authorized on VM — rerun Part D |
+| Robot plays the canned "HQ's not picking up" line | bridge unreachable from the Pi: check `BRIDGE_URL`, the VM firewall on :8643, and that `avail-intern-bridge` is running |
+| Bridge log shows 401s | `BRIDGE_API_KEY` mismatch between Pi env and bridge `.env` |
+| Bridge `/health` shows `"hermes": false` | Hermes gateway not running or api_server disabled — see Part A |
+| Robot answers everything it overhears | the SOUL.md robot-channel rules are missing — Part A step 3 |
 | 401 from provider on VM | stale `ANTHROPIC_*` entries — see Part A gotchas |
 | Bot silent in Slack channels | missing `channels:history` scope or bot not invited; also check `SLACK_ALLOWED_USERS` |

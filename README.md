@@ -151,37 +151,51 @@ In the web UI's Settings view, the Connection section lets you choose either the
 
 ### Hermes gateway mode (this fork)
 
-This fork adds a second backend where **all intelligence routes through a
-[Hermes Agent](https://github.com/NousResearch/hermes-agent)**: the app does
-client-side VAD → local Whisper STT → HTTP/SSE to Hermes's `api_server` →
-sentence-streamed local TTS, plus robot-action directives (`⟦emotion:happy⟧`)
-parsed from the reply. The app runs on a server next to Hermes — the robot
-(Reachy Mini Wireless) runs only the stock daemon, and the SDK connects over
-the network automatically.
+This fork adds backends where **all intelligence routes through a
+[Hermes Agent](https://github.com/NousResearch/hermes-agent)**, with robot-action
+directives (`⟦emotion:happy⟧`) parsed from its replies. The recommended
+deployment is a **split**:
+
+- **On the robot** (installed like any Reachy Mini app): the thin side —
+  mic capture, Silero VAD (ONNX, no torch), motion, directive execution.
+  Each finished utterance is POSTed to the bridge.
+- **On the server, next to Hermes**: the `avail-intern-bridge` service —
+  Whisper STT → Hermes (`api_server`, localhost) → Kokoro TTS — streaming back
+  ready-to-play audio events. Hermes itself is never exposed to the network.
 
 Setup, in order:
 
-1. **Hermes VM** — enable the `api_server` platform, restrict the robot
-   channel's toolset, and add the robot rules to `SOUL.md`:
-   follow [docs/HERMES_VM_SETUP.md](docs/HERMES_VM_SETUP.md).
-2. **Server app install** (same VM or any box that reaches both Hermes and the
-   robot's LAN):
+1. **Hermes VM** — enable `api_server`, restrict the robot channel's toolset,
+   add the robot rules to `SOUL.md`: [docs/HERMES_VM_SETUP.md](docs/HERMES_VM_SETUP.md).
+2. **Bridge service (same VM):**
    ```bash
    git clone https://github.com/vibhurajeev/reachy_mini_conversation_app.git
    cd reachy_mini_conversation_app
    uv sync && uv pip install -r requirements-hermes.txt
-   # Kokoro TTS model files (once):
-   curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
-   curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+   mkdir -p models && cd models   # Kokoro TTS model files (once)
+   curl -sLO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
+   curl -sLO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+   cd ..
+   # .env: HERMES_API_URL/HERMES_API_KEY (Hermes) + BRIDGE_API_KEY (openssl rand -hex 32)
+   uv run avail-intern-bridge      # listens on :8643; first run downloads Whisper
    ```
-3. **Configure `.env`** (see the `Hermes gateway backend` block in
-   `.env.example`): at minimum `CONVERSATION_BACKEND=hermes`,
-   `HERMES_API_URL`, `HERMES_API_KEY`.
-4. **Robot** — power on, on the same LAN; the daemon and `reachy-mini.local`
-   discovery are stock behavior. Then run `reachy-mini-conversation-app` on
-   the server. First run downloads the Whisper model (~500 MB for `small`).
+3. **Robot (Reachy Mini Wireless):** install this fork into the app venv and
+   select the bridge backend:
+   ```bash
+   scp -r . pollen@reachy-mini.local:/tmp/avail_intern
+   ssh pollen@reachy-mini.local "/venvs/apps_venv/bin/pip install /tmp/avail_intern onnxruntime"
+   # Env for the app (inherited from the daemon), e.g. via systemctl edit reachy-mini-daemon:
+   #   CONVERSATION_BACKEND=bridge
+   #   BRIDGE_URL=http://<server-ip>:8643
+   #   BRIDGE_API_KEY=<same secret as the bridge>
+   #   REACHY_MINI_CUSTOM_PROFILE=avail_intern
+   ```
+   Then start it from the dashboard, or make it the wake-up default with
+   `--startup-app reachy_mini_conversation_app`.
 
-The upstream Hugging Face backend remains the default
+A single-process variant (`CONVERSATION_BACKEND=hermes`) runs the whole
+pipeline in one place — useful for a laptop/server dev loop with the robot as
+a remote peripheral. The upstream Hugging Face backend remains the default
 (`CONVERSATION_BACKEND=hf` or unset) and is unaffected.
 
 ## Running the app

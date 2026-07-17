@@ -111,16 +111,34 @@ class TurnDetector:
         return events
 
 
+class SileroOnnxModel:
+    """Silero VAD v5 via onnxruntime — no torch dependency, Pi-friendly.
+
+    The 2.3 MB MIT-licensed model ships in package data. The recurrent state
+    is carried between calls, so one instance serves one audio stream.
+    """
+
+    def __init__(self, model_path: str | None = None) -> None:
+        """Create the inference session and zeroed recurrent state."""
+        import onnxruntime as ort  # heavy optional dep; only needed for real VAD
+
+        if model_path is None:
+            from importlib.resources import files
+
+            model_path = str(files("reachy_mini_conversation_app.hermes_backend").joinpath("data/silero_vad.onnx"))
+        self._session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+        self._state = np.zeros((2, 1, 128), dtype=np.float32)
+        self._sr = np.array(SAMPLE_RATE, dtype=np.int64)
+
+    def __call__(self, chunk: NDArray[np.float32]) -> float:
+        """Return P(speech) for one 512-sample chunk, advancing the state."""
+        prob, self._state = self._session.run(
+            None,
+            {"input": chunk.reshape(1, -1), "state": self._state, "sr": self._sr},
+        )
+        return float(prob[0][0])
+
+
 def load_silero_model() -> SpeechProbModel:
-    """Load Silero VAD (ONNX) and adapt it to the SpeechProbModel protocol."""
-    from silero_vad import load_silero_vad
-
-    silero = load_silero_vad(onnx=True)
-
-    def _prob(chunk: NDArray[np.float32]) -> float:
-        """Return Silero's speech probability for one chunk."""
-        import torch
-
-        return float(silero(torch.from_numpy(chunk), SAMPLE_RATE).item())
-
-    return _prob
+    """Load the packaged Silero VAD (ONNX) as a SpeechProbModel."""
+    return SileroOnnxModel()

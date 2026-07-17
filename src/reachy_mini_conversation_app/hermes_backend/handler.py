@@ -31,17 +31,17 @@ from reachy_mini_conversation_app.conversation_handler import AudioFrame, Conver
 from reachy_mini_conversation_app.hermes_backend.audio import to_mono_int16, resample_int16
 from reachy_mini_conversation_app.hermes_backend.client import HermesClient, HermesUnavailableError
 from reachy_mini_conversation_app.hermes_backend.actions import Directive, SentenceChunker, StreamActionParser
+from reachy_mini_conversation_app.hermes_backend.phrases import (  # noqa: F401  (re-exported for back-compat)
+    PHRASE_TIMEOUT,
+    PHRASE_UNREACHABLE,
+    PHRASE_STREAM_DROPPED,
+    PHRASE_MONOLOGUE_TRAILOFF,
+)
 from reachy_mini_conversation_app.hermes_backend.settings import HermesSettings
 from reachy_mini_conversation_app.tools.background_tool_manager import BackgroundToolManager
 
 
 logger = logging.getLogger(__name__)
-
-#: Canned lines for failure modes (D7) — spoken locally, never silent.
-PHRASE_UNREACHABLE = "HQ's not picking up. Typical. Try me again in a minute."
-PHRASE_TIMEOUT = "HQ is taking forever. I'll pretend that's a compliment to the question."
-PHRASE_STREAM_DROPPED = "Lost the line to HQ mid-thought. That's all I got."
-PHRASE_MONOLOGUE_TRAILOFF = "There's more, but ask me if you want it."
 
 
 class HermesTextHandler(ConversationHandler):

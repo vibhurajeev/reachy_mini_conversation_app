@@ -1,0 +1,5 @@
+# Extra dependency for the THIN robot-side deployment (CONVERSATION_BACKEND=bridge).
+# The Pi runs only Silero VAD (via onnxruntime, packaged model) — no torch,
+# no Whisper, no Kokoro. Everything heavy lives on the bridge service (VM).
+# Install into the robot's app venv:  pip install onnxruntime  (or this file)
+onnxruntime>=1.20
