@@ -3,16 +3,24 @@
 import numpy as np
 from numpy.typing import NDArray
 
+from reachy_mini_conversation_app.streaming import audio_to_int16
+
 
 def to_mono_int16(audio: NDArray[np.int16] | NDArray[np.float32]) -> NDArray[np.int16]:
-    """Collapse a (C, N) or (N,) frame to mono int16 samples."""
-    data = np.asarray(audio)
+    """Collapse a frame to mono int16 using the app's channels-last convention.
+
+    Mirrors the downmix in HuggingFaceRealtimeHandler.receive and the play loop:
+    the Reachy media stack delivers channels-last (N, C) frames, e.g. (256, 2);
+    transpose if channels-first, then take the first channel (the daemon's
+    beamformed primary), and cast via the shared streaming helper.
+    """
+    data = audio
     if data.ndim == 2:
-        # Channels-first (C, N) as produced by the media stack; average channels.
-        data = data.mean(axis=0)
-    if data.dtype == np.float32 or data.dtype == np.float64:
-        data = np.clip(data, -1.0, 1.0) * 32767.0
-    return data.astype(np.int16, copy=False)
+        if data.shape[1] > data.shape[0]:
+            data = data.T
+        if data.shape[1] > 1:
+            data = data[:, 0]
+    return audio_to_int16(data)
 
 
 def resample_int16(audio: NDArray[np.int16], src_rate: int, dst_rate: int) -> NDArray[np.int16]:

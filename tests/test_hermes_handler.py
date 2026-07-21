@@ -7,6 +7,7 @@ import pytest
 
 from reachy_mini_conversation_app.tools.core_tools import ToolDependencies
 from reachy_mini_conversation_app.hermes_backend.vad import TurnDetector, TurnEventKind
+from reachy_mini_conversation_app.hermes_backend.audio import to_mono_int16
 from reachy_mini_conversation_app.hermes_backend.client import HermesUnavailableError
 from reachy_mini_conversation_app.hermes_backend.actions import SentenceChunker, StreamActionParser
 from reachy_mini_conversation_app.hermes_backend.handler import (
@@ -62,6 +63,17 @@ def test_sentence_chunker_splits_and_flushes() -> None:
     assert chunker.feed("One. Two! Thr") == ["One.", "Two!"]
     assert chunker.feed("ee? And then") == ["Three?"]
     assert chunker.flush() == "And then"
+
+
+# ----------------------------------------------------------------- audio
+
+
+def test_to_mono_handles_channels_last_and_first() -> None:
+    """Both (N, C) — the robot's layout — and (C, N) collapse to N mono samples."""
+    channels_last = np.zeros((256, 2), dtype=np.float32)  # Reachy media: (samples, channels)
+    channels_first = np.zeros((2, 256), dtype=np.float32)
+    assert to_mono_int16(channels_last).shape == (256,)
+    assert to_mono_int16(channels_first).shape == (256,)
 
 
 # ----------------------------------------------------------------- VAD
