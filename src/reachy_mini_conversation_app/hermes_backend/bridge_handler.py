@@ -130,10 +130,11 @@ class BridgeHandler(HermesTextHandler):
         if not healthy:
             logger.error("Bridge unreachable at %s — will retry on first turn", settings.bridge_url)
 
+        self._install_diagnostics()
         self.deps.movement_manager.set_head_tracking(True)
         self._started = True
         self._mark_activity("bridge_startup")
-        logger.info("BridgeHandler ready (bridge=%s)", settings.bridge_url)
+        logger.info("BridgeHandler ready (bridge=%s, healthy=%s)", settings.bridge_url, healthy)
         await self._shutdown_event.wait()
 
     async def shutdown(self) -> None:
@@ -194,23 +195,29 @@ class BridgeHandler(HermesTextHandler):
     async def _render_event(self, event: dict[str, Any]) -> bool:
         """Apply one bridge event; returns True when the turn is finished."""
         kind = event.get("type")
+        logger.debug("Bridge event: %s", kind)
         if kind == "transcript":
             logger.info("Bridge transcript: %r", event.get("text"))
             self._mark_activity("transcript")
         elif kind == "ignored":
-            logger.info("Bridge: utterance ignored")
+            logger.info("Bridge: utterance ignored (not addressed / too short)")
             return True
         elif kind == "directive":
             name = str(event.get("name") or "")
             argument = event.get("argument")
+            logger.info("Bridge directive: %s %s", name, argument or "")
             self._dispatch_directives([Directive(name=name, argument=argument)])
         elif kind in ("sentence", "error"):
+            text = event.get("text") or event.get("phrase")
+            logger.info("Bridge %s: %r", kind, text)
             audio_b64 = event.get("audio_b64")
             if audio_b64:
                 pcm = np.frombuffer(base64.b64decode(audio_b64), dtype=np.int16)
                 rate = int(event.get("rate") or self.settings.player_sample_rate)
+                logger.debug("Playing %d samples @ %d Hz", pcm.size, rate)
                 await self._play_pcm(pcm, rate)
         elif kind == "done":
+            logger.debug("Bridge turn complete")
             return True
         return False
 

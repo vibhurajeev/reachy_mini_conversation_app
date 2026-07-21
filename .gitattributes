@@ -23,7 +23,10 @@
 *.clip lfs
 *.webm lfs
 *.webp lfs
-*.svg lfs
+# SVGs are kept as normal git text files in this fork — they are small, and
+# LFS pointers render as broken images when cloned without git-lfs installed
+# (or with GIT_LFS_SKIP_SMUDGE). See docs/ARCHITECTURE for the app UI assets.
+*.svg -text -filter -diff -merge
 *.svgz lfs
 *.psd lfs
 *.afphoto lfs

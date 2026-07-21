@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 import logging
 import argparse
 import warnings
@@ -50,8 +51,16 @@ def parse_args() -> tuple[argparse.Namespace, list]:  # type: ignore
 
 
 def setup_logger(debug: bool) -> logging.Logger:
-    """Setups the logger."""
-    log_level = "DEBUG" if debug else "INFO"
+    """Set up the logger. Honors CONVERSATION_DEBUG / CONVERSATION_LOG_LEVEL env vars.
+
+    The daemon launches the app as a subprocess and never passes --debug, so on
+    the robot debug logging is enabled via the daemon environment instead:
+    Environment=CONVERSATION_DEBUG=1  (or CONVERSATION_LOG_LEVEL=DEBUG).
+    """
+    env_debug = os.getenv("CONVERSATION_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
+    log_level = os.getenv("CONVERSATION_LOG_LEVEL", "").strip().upper()
+    if not log_level:
+        log_level = "DEBUG" if (debug or env_debug) else "INFO"
     logging.basicConfig(
         level=getattr(logging, log_level, logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s:%(lineno)d | %(message)s",

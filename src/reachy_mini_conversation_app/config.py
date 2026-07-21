@@ -9,9 +9,11 @@ from importlib.resources import files
 from dotenv import find_dotenv, load_dotenv
 
 
-# Locked profile: set to a profile name (e.g., "astronomer") to lock the app
-# to that profile and disable all profile switching. Leave as None for normal behavior.
-LOCKED_PROFILE: str | None = None
+# Locked profile: lock the app to one profile and disable all switching.
+# This fork runs as the Avail Intern only; set LOCKED_PROFILE=avail_intern in the
+# deployment environment (the daemon env on the robot) to enforce it. Defaults to
+# unlocked so the upstream profile-switching tests and dev workflows are unaffected.
+LOCKED_PROFILE: str | None = os.getenv("LOCKED_PROFILE") or None
 PROJECT_ROOT = Path(__file__).parents[2].resolve()
 
 

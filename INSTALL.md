@@ -112,8 +112,17 @@ The robot runs only mic capture + VAD + motion; no models, no torch.
    Environment=BRIDGE_URL=http://<vm-ip>:8643
    Environment=BRIDGE_API_KEY=<the key from Part C>
    Environment=REACHY_MINI_CUSTOM_PROFILE=avail_intern
+   Environment=LOCKED_PROFILE=avail_intern
+   Environment=CONVERSATION_DEBUG=1
    ```
    then `sudo systemctl restart reachy-mini-daemon`.
+
+   `LOCKED_PROFILE=avail_intern` makes Avail Intern the only profile (switching
+   disabled). `CONVERSATION_DEBUG=1` turns on verbose per-stage logging — every
+   mic frame's format, VAD turn boundary, bridge event, directive, and any
+   crashing background task is logged with a full traceback. Drop it (or set
+   `CONVERSATION_LOG_LEVEL=INFO`) once things are stable. Follow the logs with
+   `sudo journalctl -u reachy-mini-daemon -f`.
 4. Start the app from the dashboard — or make it the default wake-up
    experience with the daemon's `--startup-app reachy_mini_conversation_app`
    (touching an antenna then wakes the robot straight into the intern).

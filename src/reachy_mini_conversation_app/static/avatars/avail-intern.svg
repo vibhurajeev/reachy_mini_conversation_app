@@ -1,0 +1,27 @@
+<svg viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Avail Intern avatar">
+  <defs>
+    <linearGradient id="ai-body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e0f2fe"/>
+      <stop offset="1" stop-color="#38bdf8"/>
+    </linearGradient>
+    <linearGradient id="ai-glow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#3b82f6"/>
+    </linearGradient>
+  </defs>
+  <circle cx="80" cy="82" r="70" fill="url(#ai-glow)" opacity="0.12"/>
+  <!-- antennas -->
+  <line x1="56" y1="34" x2="50" y2="13" stroke="#0ea5e9" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="50" cy="11" r="6" fill="#22d3ee"/>
+  <line x1="104" y1="34" x2="110" y2="13" stroke="#0ea5e9" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="110" cy="11" r="6" fill="#22d3ee"/>
+  <!-- head -->
+  <rect x="34" y="40" width="92" height="82" rx="30" fill="url(#ai-body)" stroke="#0369a1" stroke-width="3"/>
+  <!-- face plate -->
+  <rect x="48" y="58" width="64" height="42" rx="21" fill="#0c4a6e"/>
+  <!-- eyes: one raised, a wry intern look -->
+  <circle cx="68" cy="80" r="7" fill="#67e8f9"/>
+  <circle cx="92" cy="77" r="7" fill="#67e8f9"/>
+  <!-- little "A" badge for Avail -->
+  <path d="M74 116 l6 -14 l6 14 M76.5 111 h7" stroke="#0369a1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

@@ -3,6 +3,7 @@
 export const BUILT_IN_DEFAULT_OPTION = "(built-in default)";
 
 export const AVATAR_BY_PROFILE = Object.freeze({
+  avail_intern: "avail-intern.svg",
   bored_teenager: "bored-teenager.svg",
   captain_circuit: "captain-circuit.svg",
   chess_coach: "chess-coach.svg",

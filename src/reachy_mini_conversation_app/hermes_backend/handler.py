@@ -38,6 +38,7 @@ from reachy_mini_conversation_app.hermes_backend.phrases import (  # noqa: F401 
     PHRASE_MONOLOGUE_TRAILOFF,
 )
 from reachy_mini_conversation_app.hermes_backend.settings import HermesSettings
+from reachy_mini_conversation_app.hermes_backend.diagnostics import supervise, install_loop_exception_handler
 from reachy_mini_conversation_app.tools.background_tool_manager import BackgroundToolManager
 
 
@@ -79,6 +80,7 @@ class HermesTextHandler(ConversationHandler):
         self._speaking = False
         self._forward_times: list[float] = []
         self._started = False
+        self._logged_first_frame = False
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -113,11 +115,19 @@ class HermesTextHandler(ConversationHandler):
         if not healthy:
             logger.error("Hermes api_server unreachable at %s — will retry on first turn", settings.api_url)
 
+        self._install_diagnostics()
         self.deps.movement_manager.set_head_tracking(True)
         self._started = True
         self._mark_activity("hermes_startup")
         logger.info("HermesTextHandler ready (api=%s, session_key=%s)", settings.api_url, settings.session_key)
         await self._shutdown_event.wait()
+
+    def _install_diagnostics(self) -> None:
+        """Route swallowed event-loop errors through the logger (crash visibility)."""
+        try:
+            install_loop_exception_handler(asyncio.get_running_loop())
+        except RuntimeError:
+            logger.debug("No running loop for diagnostics install (ignored)")
 
     async def shutdown(self) -> None:
         """Stop serving: cancel any in-flight turn and close the HTTP client."""
@@ -141,14 +151,22 @@ class HermesTextHandler(ConversationHandler):
         if self._detector is None:
             return
         sample_rate, audio = frame
-        mono = to_mono_int16(np.asarray(audio))
+        arr = np.asarray(audio)
+        if not self._logged_first_frame:
+            self._logged_first_frame = True
+            logger.info("First mic frame: rate=%s shape=%s dtype=%s", sample_rate, arr.shape, arr.dtype)
+        mono = to_mono_int16(arr)
         if sample_rate != SAMPLE_RATE:
             mono = resample_int16(mono, sample_rate, SAMPLE_RATE)
 
         for event in self._detector.feed(mono):
             if event.kind is TurnEventKind.SPEECH_START:
+                logger.debug("VAD: speech start")
                 self._on_speech_start()
             elif event.kind is TurnEventKind.TURN_END and event.utterance is not None:
+                logger.debug(
+                    "VAD: turn end (%d samples, %.2fs)", event.utterance.size, event.utterance.size / SAMPLE_RATE
+                )
                 self._on_turn_end(event.utterance)
 
     def _on_speech_start(self) -> None:
@@ -163,7 +181,7 @@ class HermesTextHandler(ConversationHandler):
         self._mark_activity("user_turn_end")
         self.deps.movement_manager.set_listening(False)
         self._cancel_turn()
-        self._turn_task = asyncio.create_task(self._handle_turn(utterance), name="hermes-turn")
+        self._turn_task = supervise(self._handle_turn(utterance), name="hermes-turn")
 
     def _barge_in(self) -> None:
         """Stop current output: cancel the turn and drain queued audio."""
@@ -293,7 +311,7 @@ class HermesTextHandler(ConversationHandler):
             except Exception:
                 logger.debug("Thinking motion failed (ignored)", exc_info=True)
 
-        asyncio.create_task(_run(), name="hermes-thinking-motion")
+        supervise(_run(), name="hermes-thinking-motion")
 
     def _dispatch_directives(self, directives: list[Directive]) -> bool:
         """Run action directives via existing tools; returns True on ⟦ignore⟧."""
@@ -318,6 +336,8 @@ class HermesTextHandler(ConversationHandler):
             logger.info("Directive requested unavailable tool %r", name)
             return
 
+        logger.debug("Dispatching directive tool %r args=%r", name, kwargs)
+
         async def _run() -> None:
             """Run the tool, logging (not raising) any failure."""
             try:
@@ -325,7 +345,7 @@ class HermesTextHandler(ConversationHandler):
             except Exception:
                 logger.warning("Directive tool %r failed", name, exc_info=True)
 
-        asyncio.create_task(_run(), name=f"hermes-action-{name}")
+        supervise(_run(), name=f"hermes-action-{name}")
 
     # ------------------------------------------------------------------ UI surface
 
