@@ -59,6 +59,9 @@ class TurnDetector:
     _pad: list[NDArray[np.int16]] = field(default_factory=list)
     _in_speech: bool = False
     _silence_samples: int = 0
+    _trace_chunks: int = 0
+    _trace_max_prob: float = 0.0
+    _trace_peak: float = 0.0
 
     def feed(self, audio: NDArray[np.int16]) -> list[TurnEvent]:
         """Consume a frame of int16 mono 16 kHz audio and return any turn events."""
@@ -78,9 +81,33 @@ class TurnDetector:
         self._in_speech = False
         self._silence_samples = 0
 
+    def _trace(self, chunk: NDArray[np.int16], prob: float) -> None:
+        """Once per ~second, log peak mic level and max speech probability.
+
+        Makes an otherwise-silent VAD observable: near-zero peak means no audio
+        is reaching the detector; a healthy peak with low prob means the
+        threshold is too high (or it is genuinely not speech).
+        """
+        peak = float(np.abs(chunk).max()) / 32768.0
+        self._trace_peak = max(self._trace_peak, peak)
+        self._trace_max_prob = max(self._trace_max_prob, prob)
+        self._trace_chunks += 1
+        if self._trace_chunks >= 30:  # ~1s at 512-sample chunks / 16 kHz
+            logger.info(
+                "VAD trace: peak=%.3f max_prob=%.2f threshold=%.2f in_speech=%s",
+                self._trace_peak,
+                self._trace_max_prob,
+                self.threshold,
+                self._in_speech,
+            )
+            self._trace_chunks = 0
+            self._trace_peak = 0.0
+            self._trace_max_prob = 0.0
+
     def _feed_chunk(self, chunk: NDArray[np.int16]) -> list[TurnEvent]:
         """Advance the state machine by one fixed-size chunk."""
         prob = self.model(chunk.astype(np.float32) / 32768.0)
+        self._trace(chunk, prob)
         events: list[TurnEvent] = []
 
         if not self._in_speech:
