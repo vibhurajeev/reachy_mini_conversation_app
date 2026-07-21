@@ -138,15 +138,21 @@ class TurnDetector:
         return events
 
 
+CONTEXT_SAMPLES = 64  # Silero v5 prepends 64 samples of prior context at 16 kHz.
+
+
 class SileroOnnxModel:
     """Silero VAD v5 via onnxruntime — no torch dependency, Pi-friendly.
 
-    The 2.3 MB MIT-licensed model ships in package data. The recurrent state
-    is carried between calls, so one instance serves one audio stream.
+    The 2.3 MB MIT-licensed model ships in package data. Each call feeds the
+    64-sample tail of the previous chunk prepended to the current 512 samples
+    (576 total) — the model is trained that way, and omitting the context makes
+    it output near-zero for real speech. Recurrent state and context are carried
+    between calls, so one instance serves one audio stream.
     """
 
     def __init__(self, model_path: str | None = None) -> None:
-        """Create the inference session and zeroed recurrent state."""
+        """Create the inference session and zeroed recurrent state + context."""
         import onnxruntime as ort  # heavy optional dep; only needed for real VAD
 
         if model_path is None:
@@ -155,14 +161,17 @@ class SileroOnnxModel:
             model_path = str(files("reachy_mini_conversation_app.hermes_backend").joinpath("data/silero_vad.onnx"))
         self._session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
         self._state = np.zeros((2, 1, 128), dtype=np.float32)
+        self._context = np.zeros((1, CONTEXT_SAMPLES), dtype=np.float32)
         self._sr = np.array(SAMPLE_RATE, dtype=np.int64)
 
     def __call__(self, chunk: NDArray[np.float32]) -> float:
-        """Return P(speech) for one 512-sample chunk, advancing the state."""
+        """Return P(speech) for one 512-sample chunk, advancing state + context."""
+        x = np.concatenate([self._context, chunk.reshape(1, -1)], axis=1)
         prob, self._state = self._session.run(
             None,
-            {"input": chunk.reshape(1, -1), "state": self._state, "sr": self._sr},
+            {"input": x, "state": self._state, "sr": self._sr},
         )
+        self._context = x[:, -CONTEXT_SAMPLES:]
         return float(prob[0][0])
 
 

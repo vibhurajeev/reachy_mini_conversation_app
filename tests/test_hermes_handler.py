@@ -76,6 +76,33 @@ def test_to_mono_handles_channels_last_and_first() -> None:
     assert to_mono_int16(channels_first).shape == (256,)
 
 
+def test_silero_onnx_responds_to_loud_signal() -> None:
+    """A loud voiced signal must score far above silence.
+
+    Regression for the missing-context bug, where the wrapper returned
+    near-zero for everything and the robot never heard speech.
+    """
+    pytest.importorskip("onnxruntime")
+    from reachy_mini_conversation_app.hermes_backend.vad import SAMPLE_RATE, CHUNK_SAMPLES, SileroOnnxModel
+
+    def run(signal: np.ndarray) -> float:
+        model = SileroOnnxModel()
+        probs = [
+            model(signal[i : i + CHUNK_SAMPLES].astype(np.float32) / 32768.0)
+            for i in range(0, signal.size - CHUNK_SAMPLES, CHUNK_SAMPLES)
+        ]
+        return max(probs)
+
+    t = np.arange(SAMPLE_RATE) / SAMPLE_RATE
+    voiced = sum(np.sin(2 * np.pi * f * t) for f in (150, 300, 600, 1200, 2400)) / 5
+    loud = (0.5 * voiced * 32767).astype(np.int16)
+    silence = np.zeros(SAMPLE_RATE, dtype=np.int16)
+    # With the context bug this loud signal scored ~0.03 (indistinguishable from
+    # silence); with the fix it clears 0.05 and sits well above silence.
+    assert run(loud) > 0.05
+    assert run(loud) > run(silence) * 3
+
+
 # ----------------------------------------------------------------- VAD
 
 
